@@ -1,28 +1,13 @@
 from typing import Annotated, Optional
 
 import typer
+from perry_the_docker_agent.config.instance_config import PerryInstanceConfig
+from perry_the_docker_agent.config.perry_config import PerryConfig
+from perry_the_docker_agent.core import RemoteDockerClient
 from rich import print
 from yaml import safe_load
 
-from .config import PerryConfig
-from .core import RemoteDockerClient, create_remote_docker_client
-
-app = typer.Typer()
-
-
-@app.command()
-def create_key_pair(ctx: typer.Context):
-    """Create and upload a new keypair to AWS for SSH access"""
-    client: RemoteDockerClient = ctx.obj
-    client.create_keypair()
-
-
-@app.command()
-def create(ctx: typer.Context):
-    """Provision a new ec2 instance to use as the remote agent"""
-    client: RemoteDockerClient = ctx.obj
-    print(client.create_instance())
-    client.use_remote_context()
+app = typer.Typer(pretty_exceptions_enable=False)
 
 
 @app.command()
@@ -38,6 +23,13 @@ def sync(ctx: typer.Context):
     """Sync the given directories with the remote instance"""
     client: RemoteDockerClient = ctx.obj
     client.sync()
+
+
+@app.command()
+def bootstrap(ctx: typer.Context):
+    """Connect to the remote agent via SSH"""
+    client: RemoteDockerClient = ctx.obj
+    client.bootstrap()
 
 
 @app.command()
@@ -61,14 +53,6 @@ def stop(ctx: typer.Context):
 
 
 @app.command()
-def delete(ctx: typer.Context):
-    """Delete the provisioned ec2 instance"""
-    client: RemoteDockerClient = ctx.obj
-    print(client.delete_instance())
-    client.use_default_context()
-
-
-@app.command()
 def tunnel(ctx: typer.Context):
     """
     Create a SSH tunnel to the remote instance to connect
@@ -87,8 +71,12 @@ def entry(
     ),
 ):
     loaded_yaml = safe_load(open(config_path))
+
     config = PerryConfig.parse_obj(loaded_yaml)
-    ctx.obj = create_remote_docker_client(config)
+
+    instance_config = PerryInstanceConfig.parse_file(config.instance_config_path)
+
+    ctx.obj = RemoteDockerClient.from_config(config, instance_config)
 
 
 if __name__ == "__main__":
